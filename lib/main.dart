@@ -234,7 +234,7 @@ class _HomePageState extends State<HomePage> {
         pw.SizedBox(height: 14),
         pw.Text('Selected Devata: ${selectedCell == null ? 'None' : (cellDevta[selectedCell!]?.hindi ?? '—')}'),
       ],
-    ));
+    )));
     await Printing.layoutPdf(onLayout: (format) async => pdf.save());
   }
 
