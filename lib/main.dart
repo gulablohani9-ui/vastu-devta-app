@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart' show rootBundle;
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:pdf/pdf.dart';
@@ -217,25 +219,163 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> showPdf() async {
-    if (points.length < 3) return;
+    if (points.length < 3 || imageBytes == null) return;
+
     final pdf = pw.Document();
+    final photo = pw.MemoryImage(imageBytes!);
+    final regularFont = pw.Font.ttf(await rootBundle.load('assets/NotoSansDevanagari-Regular.ttf'));
+    final boldFont = pw.Font.ttf(await rootBundle.load('assets/NotoSansDevanagari-Bold.ttf'));
+    final base = pw.TextStyle(font: regularFont, fontSize: 9);
+    final bold = pw.TextStyle(font: boldFont, fontSize: 10);
+    final width = double.tryParse(widthController.text) ?? 0;
+    final length = double.tryParse(lengthController.text) ?? 0;
+    final degree = double.tryParse(northController.text) ?? 0;
+
+    // PAGE 1: Plot photo + Vastu Devata numbers.
+    const boxW = 535.0;
+    const boxH = 610.0;
+    final poly = points.map((e) => Offset(e.x * boxW, e.y * boxH)).toList();
+    final xs = poly.map((e) => e.dx).toList();
+    final ys = poly.map((e) => e.dy).toList();
+    final minX = xs.reduce(math.min), maxX = xs.reduce(math.max);
+    final minY = ys.reduce(math.min), maxY = ys.reduce(math.max);
+    final cx = poly.map((e) => e.dx).reduce((a, b) => a + b) / poly.length;
+    final cy = poly.map((e) => e.dy).reduce((a, b) => a + b) / poly.length;
+    final angle = degree * math.pi / 180;
+    Offset rotatePoint(Offset p) {
+      final dx = p.dx - cx, dy = p.dy - cy;
+      return Offset(cx + dx * math.cos(angle) - dy * math.sin(angle),
+          cy + dx * math.sin(angle) + dy * math.cos(angle));
+    }
+
+    final overlays = <pw.Widget>[];
+    final cellW = (maxX - minX) / 9;
+    final cellH = (maxY - minY) / 9;
+    for (int r = 0; r < 9; r++) {
+      for (int c = 0; c < 9; c++) {
+        final idx = r * 9 + c;
+        final mid = rotatePoint(Offset(minX + (c + .5) * cellW, minY + (r + .5) * cellH));
+        final d = cellDevta[idx];
+        if (d == null) continue;
+        overlays.add(pw.Positioned(
+          left: (mid.dx - 12).clamp(0.0, boxW - 24),
+          top: (mid.dy - 10).clamp(0.0, boxH - 20),
+          child: pw.Container(
+            width: 24,
+            height: 20,
+            alignment: pw.Alignment.center,
+            decoration: pw.BoxDecoration(
+              color: PdfColors.white,
+              border: pw.Border.all(color: d.no == 45 ? PdfColors.red : PdfColors.blue, width: 1),
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+            ),
+            child: pw.Text('${d.no}', style: pw.TextStyle(font: boldFont, fontSize: 9, color: d.no == 45 ? PdfColors.red900 : PdfColors.blue900)),
+          ),
+        ));
+      }
+    }
+
     pdf.addPage(pw.Page(
       pageFormat: PdfPageFormat.a4,
-      build: (ctx) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-        pw.Text('Vastu Plot Analyzer', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
-        pw.SizedBox(height: 8),
-        pw.Text('Plot: ${widthController.text} × ${lengthController.text} ft | North: ${northController.text}°'),
-        pw.SizedBox(height: 12),
-        pw.Text('Boundary points: ${points.length} (editable polygon)'),
-        pw.SizedBox(height: 12),
-        pw.Text('9×9 Paramasayika Mandala — Brahmasthan = central 3×3 padas'),
+      margin: const pw.EdgeInsets.fromLTRB(28, 24, 28, 24),
+      build: (ctx) => pw.Column(children: [
+        pw.Text('Vastu Plot Analysis Report', style: pw.TextStyle(font: boldFont, fontSize: 20)),
+        pw.SizedBox(height: 4),
+        pw.Text('Plot: ${widthController.text} × ${lengthController.text} ft  |  North / Rotation: ${northController.text}°', style: pw.TextStyle(font: regularFont, fontSize: 10)),
         pw.SizedBox(height: 10),
-        pw.Text('The overlay is a geometry visualization. Traditional Vastu interpretations and remedies vary by tradition and practitioner.'),
-        pw.SizedBox(height: 14),
-        pw.Text('Selected Devata: ${selectedCell == null ? 'None' : (cellDevta[selectedCell!]?.hindi ?? '—')}'),
+        pw.Container(
+          width: boxW,
+          height: boxH,
+          child: pw.Stack(children: [
+            pw.Positioned.fill(child: pw.Image(photo, fit: pw.BoxFit.fill)),
+            ...overlays,
+            pw.Positioned(left: 8, top: 8, child: pw.Container(padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3), color: PdfColors.white, child: pw.Text('45 Devata numbers', style: pw.TextStyle(font: boldFont, fontSize: 9)))),
+          ]),
+        ),
+        pw.SizedBox(height: 7),
+        pw.Text('नोट: इस पेज पर फोटो के ऊपर Vastu Devata के reference numbers दिखाए गए हैं।', style: base),
+      ]),
+    ));
+
+    // PAGE 2: All 45 Devata names and reference information.
+    pdf.addPage(pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(28),
+      build: (ctx) => [
+        pw.Text('45 Vastu Devata — Name Reference', style: pw.TextStyle(font: boldFont, fontSize: 19)),
+        pw.SizedBox(height: 5),
+        pw.Text('Plot: ${widthController.text} × ${lengthController.text} ft | Rotation: ${northController.text}°', style: base),
+        pw.SizedBox(height: 12),
+        pw.TableHelper.fromTextArray(
+          headers: ['No.', 'देवता का नाम', 'English', 'Zone / Reference'],
+          data: devtas.map((d) => [d.no.toString(), d.hindi, d.name, d.zone]).toList(),
+          headerStyle: pw.TextStyle(font: boldFont, fontSize: 9),
+          cellStyle: pw.TextStyle(font: regularFont, fontSize: 8.5),
+          cellAlignment: pw.Alignment.centerLeft,
+          headerDecoration: const pw.BoxDecoration(color: PdfColors.green100),
+          border: pw.TableBorder.all(color: PdfColors.grey400, width: .5),
+          cellPadding: const pw.EdgeInsets.all(4),
+        ),
       ],
-    )));
+    ));
+
+    // PAGE 3: Remedies / traditional suggestions.
+    final remedyRows = devtas.map((d) => [
+      d.no.toString(),
+      d.hindi,
+      _remedyFor(d.no),
+      _crystalFor(d.no),
+      _colourFor(d.no),
+    ]).toList();
+    pdf.addPage(pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(26),
+      build: (ctx) => [
+        pw.Text('देवता अनुसार पारंपरिक उपाय', style: pw.TextStyle(font: boldFont, fontSize: 18)),
+        pw.SizedBox(height: 6),
+        pw.Text('नीचे दिए गए उपाय पारंपरिक Vastu/आध्यात्मिक मान्यताओं पर आधारित सामान्य सुझाव हैं। इन्हें चिकित्सा, इंजीनियरिंग या कानूनी सलाह न माना जाए।', style: base),
+        pw.SizedBox(height: 10),
+        pw.TableHelper.fromTextArray(
+          headers: ['No.', 'देवता', 'उपाय', 'Crystal', 'Colour'],
+          data: remedyRows,
+          headerStyle: pw.TextStyle(font: boldFont, fontSize: 8),
+          cellStyle: pw.TextStyle(font: regularFont, fontSize: 7.4),
+          headerDecoration: const pw.BoxDecoration(color: PdfColors.green100),
+          border: pw.TableBorder.all(color: PdfColors.grey400, width: .5),
+          cellPadding: const pw.EdgeInsets.all(3),
+          columnWidths: {0: const pw.FixedColumnWidth(24), 1: const pw.FixedColumnWidth(52), 2: const pw.FlexColumnWidth(3.2), 3: const pw.FlexColumnWidth(1.4), 4: const pw.FlexColumnWidth(1.4)},
+        ),
+        pw.SizedBox(height: 14),
+        pw.Divider(),
+        pw.Align(alignment: pw.Alignment.center, child: pw.Text('Ghanshyam Lohani', style: pw.TextStyle(font: boldFont, fontSize: 15))),
+      ],
+    ));
+
     await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+  }
+
+  String _remedyFor(int no) {
+    if (no == 45) return 'ब्रह्मस्थान को यथासंभव खुला, स्वच्छ और हल्का रखें; भारी संरचना से बचें।';
+    if ([7, 8, 37, 38].contains(no)) return 'ईशान/जल क्षेत्र को स्वच्छ रखें; पूजा या ध्यान के लिए शांत स्थान रखें।';
+    if ([25, 26, 27, 28].contains(no)) return 'नैऋत्य/स्थिरता क्षेत्र में भारी सामान सुव्यवस्थित रखें और अनावश्यक कटाव से बचें।';
+    if ([10, 11, 12, 13, 14, 15].contains(no)) return 'अग्नि/पूर्व-दक्षिण क्षेत्र में स्वच्छता, उचित रोशनी और सुरक्षित electrical planning रखें।';
+    if ([16, 17, 18, 19, 20, 21].contains(no)) return 'दक्षिण क्षेत्र में पर्याप्त रोशनी/वेंटिलेशन और व्यवस्थित उपयोग रखें।';
+    if ([29, 30, 31, 32].contains(no)) return 'उत्तर-पश्चिम क्षेत्र को हवादार, साफ और अव्यवस्था-मुक्त रखें।';
+    return 'क्षेत्र को साफ, व्यवस्थित, अच्छी तरह प्रकाशित और उपयोग के अनुसार संतुलित रखें।';
+  }
+
+  String _crystalFor(int no) {
+    if ([7, 8, 37, 38].contains(no)) return 'Clear Quartz';
+    if ([10, 11, 12, 13, 14, 15].contains(no)) return 'Citrine';
+    if ([25, 26, 27, 28].contains(no)) return 'Smoky Quartz';
+    return 'Clear Quartz';
+  }
+
+  String _colourFor(int no) {
+    if ([7, 8, 37, 38].contains(no)) return 'हल्का सफेद/क्रीम';
+    if ([10, 11, 12, 13, 14, 15].contains(no)) return 'हल्का नारंगी';
+    if ([25, 26, 27, 28].contains(no)) return 'हल्का पीला/भूरा';
+    return 'हल्का, साफ रंग';
   }
 
   @override
@@ -428,19 +568,42 @@ class PlotPainter extends CustomPainter {
         final mid = Offset((a.dx + cc.dx) / 2, (a.dy + cc.dy) / 2);
         if (selectedCell == idx) canvas.drawPath(cellPath, Paint()..style = PaintingStyle.fill..color = Colors.yellow.withOpacity(.5));
         canvas.drawPath(cellPath, gridPaint);
-        final t = TextPainter(text: TextSpan(text: '${idx + 1}', style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold, shadows: [Shadow(blurRadius: 2, color: Colors.white)])), textDirection: TextDirection.ltr)..layout();
-        t.paint(canvas, mid - Offset(t.width / 2, t.height / 2));
+        // Geometry follows the supplied North rotation, but ALL text stays upright/readable.
+        _uprightText(
+          canvas,
+          '${idx + 1}',
+          mid,
+          -deg,
+          const TextStyle(
+            color: Colors.black,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            shadows: [Shadow(blurRadius: 2, color: Colors.white)],
+          ),
+        );
         final dta = mapping[idx];
         if (dta != null) {
-          final nt = TextPainter(text: TextSpan(text: dta.hindi, style: TextStyle(color: dta.no == 45 ? Colors.red.shade900 : Colors.blue.shade900, fontSize: dta.no == 45 ? 10 : 7, fontWeight: FontWeight.bold, shadows: const [Shadow(blurRadius: 2, color: Colors.white)])), textDirection: TextDirection.ltr)..layout(maxWidth: 50);
-          nt.paint(canvas, mid + Offset(-nt.width / 2, 7));
+          _uprightText(
+            canvas,
+            dta.hindi,
+            mid + const Offset(0, 10),
+            -deg,
+            TextStyle(
+              color: dta.no == 45 ? Colors.red.shade900 : Colors.blue.shade900,
+              fontSize: dta.no == 45 ? 10 : 7,
+              fontWeight: FontWeight.bold,
+              shadows: const [Shadow(blurRadius: 2, color: Colors.white)],
+            ),
+            maxWidth: 70,
+          );
         }
       }
     }
-    _label(canvas, 'N', Offset(center.dx - 8, minY - 26), Colors.blue.shade900);
-    _label(canvas, 'S', Offset(center.dx - 8, maxY + 8), Colors.blue.shade900);
-    _label(canvas, 'W', Offset(minX - 28, center.dy - 8), Colors.blue.shade900);
-    _label(canvas, 'E', Offset(maxX + 8, center.dy - 8), Colors.blue.shade900);
+    // Direction markers also remain upright while their positions follow the rotation.
+    _uprightText(canvas, 'N', Offset(center.dx, minY - 20), -deg, TextStyle(color: Colors.blue.shade900, fontSize: 12, fontWeight: FontWeight.bold));
+    _uprightText(canvas, 'S', Offset(center.dx, maxY + 18), -deg, TextStyle(color: Colors.blue.shade900, fontSize: 12, fontWeight: FontWeight.bold));
+    _uprightText(canvas, 'W', Offset(minX - 18, center.dy), -deg, TextStyle(color: Colors.blue.shade900, fontSize: 12, fontWeight: FontWeight.bold));
+    _uprightText(canvas, 'E', Offset(maxX + 18, center.dy), -deg, TextStyle(color: Colors.blue.shade900, fontSize: 12, fontWeight: FontWeight.bold));
     canvas.restore();
 
     // Red editable boundary dots are always visible above the grid.
@@ -451,6 +614,20 @@ class PlotPainter extends CustomPainter {
       _label(canvas, '${i + 1}', o + const Offset(9, -9), Colors.black);
     }
     _label(canvas, 'North rotation: ${northDegree}°  •  ${points.length} boundary points', const Offset(10, 10), Colors.red.shade900);
+  }
+
+
+  void _uprightText(Canvas c, String text, Offset center, double counterRotation, TextStyle style, {double maxWidth = 140}) {
+    final tp = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: TextDirection.ltr,
+      textAlign: TextAlign.center,
+    )..layout(maxWidth: maxWidth);
+    c.save();
+    c.translate(center.dx, center.dy);
+    c.rotate(counterRotation);
+    tp.paint(c, Offset(-tp.width / 2, -tp.height / 2));
+    c.restore();
   }
 
   void _label(Canvas c, String text, Offset o, Color color) {
