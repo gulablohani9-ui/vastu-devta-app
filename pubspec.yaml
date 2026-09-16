@@ -21,3 +21,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/NotoSansDevanagari-Regular.ttf
+    - assets/NotoSansDevanagari-Bold.ttf
