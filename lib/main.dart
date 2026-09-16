@@ -73,25 +73,36 @@ final Map<int, Devta> cellDevta = _buildCellMap();
 Map<int, Devta> _buildCellMap() {
   final m = <int, Devta>{};
   final byNo = {for (final d in devtas) d.no: d};
+
+  // Reference-style VPM numbering: 32 outer padas run clockwise,
+  // beginning at the north-east corner as 1 and ending at the north-west
+  // corner as 32/25 depending on the traditional presentation.  This app
+  // uses the numbered presentation visible in the supplied reference:
+  // north-west -> north-east = 25..32,1; east -> south = 2..9;
+  // south-east -> south-west = 10..17; west -> north-west = 18..25.
   final perimeter = <int>[];
-  for (int c = 0; c < 9; c++) perimeter.add(c);
-  for (int r = 1; r < 9; r++) perimeter.add(r * 9 + 8);
-  for (int c = 7; c >= 0; c--) perimeter.add(8 * 9 + c);
-  for (int r = 7; r >= 1; r--) perimeter.add(r * 9);
-  final outerNos = List<int>.generate(32, (i) => i + 1);
+  for (int c = 0; c < 9; c++) perimeter.add(c); // north
+  for (int r = 1; r < 9; r++) perimeter.add(r * 9 + 8); // east
+  for (int c = 7; c >= 0; c--) perimeter.add(8 * 9 + c); // south
+  for (int r = 7; r >= 1; r--) perimeter.add(r * 9); // west
+  final outerNos = <int>[25,26,27,28,29,30,31,32,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24];
   for (int i = 0; i < perimeter.length; i++) m[perimeter[i]] = byNo[outerNos[i]]!;
 
+  // Four corner/inner deity groups and the four cardinal inner groups.
   final inner = <int, int>{
-    30: 33, 31: 33, 32: 33,
-    39: 34, 40: 34, 41: 34,
-    57: 35, 58: 35, 59: 35,
-    48: 36, 49: 36, 50: 36,
-    21: 37, 22: 38,
-    23: 43, 24: 44,
-    66: 39, 67: 40,
-    75: 41, 76: 42,
+    10: 36, 19: 36, 20: 42, 28: 43, 29: 43, 30: 43, 31: 43, 32: 43, 33: 43,
+    14: 33, 23: 44, 24: 44, 25: 44,
+    16: 37, 17: 37, 26: 37, 35: 37, 43: 37, 44: 37, 52: 37,
+    53: 38, 54: 39, 55: 39, 56: 39, 57: 40,
+    66: 40, 67: 40, 68: 40,
+    60: 35, 69: 35, 70: 41, 61: 41, 62: 41,
+    48: 41, 49: 41,
+    21: 37, 39: 34, 40: 34, 41: 34,
   };
   for (final e in inner.entries) m[e.key] = byNo[e.value]!;
+
+  // The reference layout uses four inner corner/side deities around the
+  // central Brahma block. Keep the central 3x3 as Brahma (No. 45).
   for (int r = 3; r <= 5; r++) {
     for (int c = 3; c <= 5; c++) m[r * 9 + c] = byNo[45]!;
   }
