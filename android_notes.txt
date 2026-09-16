@@ -1,0 +1,4 @@
+The Android native folder is intentionally omitted from this source bundle to keep it small.
+Run `flutter create .` once in the repository root after cloning/uploading. This generates the
+standard Android/iOS/web platform folders, then `flutter pub get` and `flutter build apk --release`.
+GitHub Actions in .github/workflows/build-apk.yml performs these steps on Ubuntu.

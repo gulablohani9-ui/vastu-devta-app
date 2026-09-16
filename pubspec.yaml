@@ -1,0 +1,23 @@
+name: vastu_plot_analyzer
+description: Professional Vastu plot analyzer with polygon corner selection, North degree and 45 Devata overlay.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  image_picker: ^1.1.2
+  pdf: ^3.11.1
+  printing: ^5.13.4
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
