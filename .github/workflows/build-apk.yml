@@ -19,6 +19,12 @@ jobs:
           cache: true
       - name: Generate Android project files
         run: flutter create . --platforms=android --project-name vastu_plot_analyzer --org com.graphicpoint
+      - name: Set Android compile SDK
+        run: |
+          if [ -f android/app/build.gradle ]; then
+            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/' android/app/build.gradle
+            sed -i 's/compileSdk flutter.compileSdkVersion/compileSdk 35/' android/app/build.gradle
+          fi
       - name: Get packages
         run: flutter pub get
       - name: Build APK
