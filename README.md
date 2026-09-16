@@ -26,3 +26,8 @@ Push the repository to GitHub, then use **Actions → Build Android APK**. The w
 - Deity detail database with configurable traditional remedies.
 - Crystal and colour suggestions as clearly labelled traditional/faith-based guidance, not medical treatment.
 - Professional multi-page PDF with plot image, overlay, deity table and affected-area summary.
+
+
+## GitHub Actions fix
+
+The workflow explicitly uses `--project-name vastu_plot_analyzer` so the build also works when the GitHub repository/folder has a name containing hyphens or other characters that are invalid for a Dart package name.
