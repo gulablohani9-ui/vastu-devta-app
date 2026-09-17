@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart' show rootBundle;
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:pdf/pdf.dart';
@@ -225,23 +227,94 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> showPdf() async {
     if (points.length < 3) return;
-    final pdf = pw.Document();
+
+    // Embed a real Devanagari font. The PDF package does not reliably render
+    // Hindi with its built-in fonts, especially on mobile PDF viewers.
+    final regularData = await rootBundle.load('assets/fonts/NotoSansDevanagari-Regular.ttf');
+    final boldData = await rootBundle.load('assets/fonts/NotoSansDevanagari-Bold.ttf');
+    final regularFont = pw.Font.ttf(regularData);
+    final boldFont = pw.Font.ttf(boldData);
+    final base = pw.ThemeData.withFont(base: regularFont, bold: boldFont);
+
+    final pdf = pw.Document(theme: base);
+    final photo = imageBytes == null ? null : pw.MemoryImage(imageBytes!);
+    final plotW = double.tryParse(widthController.text) ?? 0;
+    final plotL = double.tryParse(lengthController.text) ?? 0;
+    final north = northController.text;
+
+    // PAGE 1: Plot photo + analysis information.
     pdf.addPage(pw.Page(
       pageFormat: PdfPageFormat.a4,
-      build: (ctx) => pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-        pw.Text('Vastu Plot Analyzer', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
-        pw.SizedBox(height: 8),
-        pw.Text('Plot: ${widthController.text} × ${lengthController.text} ft | North: ${northController.text}°'),
-        pw.SizedBox(height: 12),
-        pw.Text('Boundary points: ${points.length} (editable polygon)'),
-        pw.SizedBox(height: 12),
-        pw.Text('9×9 Paramasayika Mandala — Brahmasthan = central 3×3 padas'),
+      margin: const pw.EdgeInsets.all(24),
+      build: (ctx) => pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text('Vastu Plot Analyzer', style: pw.TextStyle(font: boldFont, fontSize: 22)),
+          pw.SizedBox(height: 5),
+          pw.Text('Plot Photo + Vastu Devta Analysis', style: pw.TextStyle(font: boldFont, fontSize: 14)),
+          pw.SizedBox(height: 8),
+          pw.Text('Plot: ${plotW.toStringAsFixed(plotW % 1 == 0 ? 0 : 2)} × ${plotL.toStringAsFixed(plotL % 1 == 0 ? 0 : 2)} ft   |   North / Rotation: $north°', style: pw.TextStyle(font: regularFont, fontSize: 10)),
+          pw.SizedBox(height: 10),
+          if (photo != null)
+            pw.Container(height: 390, width: double.infinity, child: pw.Image(photo, fit: pw.BoxFit.contain))
+          else
+            pw.Container(height: 390, alignment: pw.Alignment.center, child: pw.Text('Plot photo not selected', style: pw.TextStyle(font: regularFont))),
+          pw.SizedBox(height: 8),
+          pw.Text('Boundary points: ${points.length}   |   9×9 = 81 Padas   |   Brahmasthan: central 3×3', style: pw.TextStyle(font: regularFont, fontSize: 10)),
+          pw.SizedBox(height: 10),
+          pw.Container(
+            padding: const pw.EdgeInsets.all(8),
+            decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey600)),
+            child: pw.Text('Devta numbering shown in the app overlay. Use the editable boundary points and North degree to set the Mandala to the actual plot geometry.', style: pw.TextStyle(font: regularFont, fontSize: 9)),
+          ),
+        ],
+      ),
+    ));
+
+    // PAGE 2: 45 Devata reference.
+    pdf.addPage(pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(24),
+      build: (ctx) => [
+        pw.Text('45 Devata Reference', style: pw.TextStyle(font: boldFont, fontSize: 20)),
         pw.SizedBox(height: 10),
-        pw.Text('The overlay is a geometry visualization. Traditional Vastu interpretations and remedies vary by tradition and practitioner.'),
-        pw.SizedBox(height: 14),
-        pw.Text('Selected Devata: ${selectedCell == null ? 'None' : (cellDevta[selectedCell!]?.hindi ?? '—')}'),
+        pw.Table.fromTextArray(
+          headers: ['No.', 'देवता का नाम', 'English', 'Zone'],
+          data: devtas.map((d) => [d.no.toString(), d.hindi, d.name, d.zone]).toList(),
+          headerStyle: pw.TextStyle(font: boldFont, fontSize: 9),
+          cellStyle: pw.TextStyle(font: regularFont, fontSize: 8),
+          cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+          border: pw.TableBorder.all(color: PdfColors.grey500, width: .5),
+        ),
       ],
-    )));
+    ));
+
+    // PAGE 3: Traditional remedies / therapy suggestions.
+    pdf.addPage(pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(24),
+      build: (ctx) => [
+        pw.Text('उपाय / Remedies', style: pw.TextStyle(font: boldFont, fontSize: 20)),
+        pw.SizedBox(height: 8),
+        pw.Text('नीचे दिए गए उपाय पारंपरिक वास्तु मान्यताओं पर आधारित सामान्य सुझाव हैं। इन्हें चिकित्सकीय उपचार न समझें।', style: pw.TextStyle(font: regularFont, fontSize: 10)),
+        pw.SizedBox(height: 12),
+        ...devtas.map((d) => pw.Container(
+          margin: const pw.EdgeInsets.only(bottom: 7),
+          padding: const pw.EdgeInsets.all(7),
+          decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey500)),
+          child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+            pw.Text('${d.no}. ${d.hindi} (${d.name})', style: pw.TextStyle(font: boldFont, fontSize: 10)),
+            pw.SizedBox(height: 2),
+            pw.Text('उपाय: स्थान को स्वच्छ, खुला और व्यवस्थित रखें; संबंधित क्षेत्र के उपयोग और निर्माण में संतुलन रखें।', style: pw.TextStyle(font: regularFont, fontSize: 8)),
+            pw.Text('Crystal: Clear Quartz / Amethyst — पारंपरिक crystal therapy suggestion.', style: pw.TextStyle(font: regularFont, fontSize: 8)),
+            pw.Text('Colour: क्षेत्र की प्रकृति के अनुसार हल्के, संतुलित रंग रखें।', style: pw.TextStyle(font: regularFont, fontSize: 8)),
+          ]),
+        )),
+        pw.SizedBox(height: 10),
+        pw.Align(alignment: pw.Alignment.center, child: pw.Text('Ghanshyam Lohani', style: pw.TextStyle(font: boldFont, fontSize: 16))),
+      ],
+    ));
+
     await Printing.layoutPdf(onLayout: (format) async => pdf.save());
   }
 
